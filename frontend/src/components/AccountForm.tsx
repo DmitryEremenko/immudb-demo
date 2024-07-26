@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { TextField, Button, Select, MenuItem } from '@mui/material';
+import { TextField, Button, Select, MenuItem, Box } from '@mui/material';
 import { Account, postAccount } from '../api';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
@@ -33,7 +33,7 @@ export const AccountForm = () => {
   };
 
   return (
-    <form onSubmit={handleSubmit}>
+    <Box>
       <TextField
         fullWidth
         margin='normal'
@@ -91,9 +91,14 @@ export const AccountForm = () => {
         <MenuItem value='sending'>Sending</MenuItem>
         <MenuItem value='receiving'>Receiving</MenuItem>
       </Select>
-      <Button type='submit' variant='contained' color='primary' style={{ marginTop: '1rem' }}>
+      <Button
+        onClick={handleSubmit}
+        variant='contained'
+        color='primary'
+        style={{ marginTop: '1rem' }}
+      >
         Add Account
       </Button>
-    </form>
+    </Box>
   );
 };

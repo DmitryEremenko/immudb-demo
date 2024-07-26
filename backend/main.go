@@ -1,183 +1,179 @@
 package main
 
 import (
-	"context"
+	"bytes"
 	"encoding/json"
+	"fmt"
+	"io"
 	"log"
 	"net/http"
-	"os"
-	"time"
+	"strconv"
 
-	"github.com/codenotary/immudb/pkg/api/schema"
-	immudb "github.com/codenotary/immudb/pkg/client"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	swaggerFiles "github.com/swaggo/files"
-	ginSwagger "github.com/swaggo/gin-swagger"
-
-	_ "backend/docs" // This is where Swag will generate its docs
 )
 
-var client immudb.ImmuClient
+const baseURL = "https://vault.immudb.io/ics/api/v1"
 
-// @title Accounting Information API
-// @version 1.0
-// @description This is a simple accounting information API.
-// @host localhost:8080
-// @BasePath /
+type Document struct {
+	AccountNumber string `json:"account_number"`
+	AccountName   string `json:"account_name"`
+	IBAN          string `json:"iban"`
+	Address       string `json:"address"`
+	Amount       string `json:"amount"`
+	Type          string `json:"type"`
+}
 
 func main() {
-	immudbAddress := getEnv("IMMUDB_ADDRESS", "immudb")
-	immudbPort := getEnv("IMMUDB_PORT", "3322")
-	immudbUsername := getEnv("IMMUDB_USERNAME", "immudb")
-	immudbPassword := getEnv("IMMUDB_PASSWORD", "immudb")
-	immudbDatabase := getEnv("IMMUDB_DATABASE", "defaultdb")
-
-	log.Printf("Connecting to immudb at %s:%s", immudbAddress, immudbPort)
-
-	opts := immudb.DefaultOptions().
-		WithAddress(immudbAddress).
-		WithPort(3322)
-
-	var err error
-	client = immudb.NewClient().WithOptions(opts)
-
-	// Retry logic
-	for i := 0; i < 5; i++ {
-		log.Printf("Attempt %d to connect to immudb", i+1)
-		err = client.OpenSession(
-			context.Background(),
-			[]byte(immudbUsername),
-			[]byte(immudbPassword),
-			immudbDatabase,
-		)
-		if err == nil {
-			break
-		}
-		log.Printf("Failed to open session: %v", err)
-		time.Sleep(5 * time.Second)
-	}
-
-	if err != nil {
-		log.Fatalf("Failed to open session after 5 attempts: %v", err)
-	}
-
-	log.Println("Successfully connected to immudb")
-
-	defer client.CloseSession(context.Background())
-
-	r := gin.Default()
+	router := gin.Default()
 
 	config := cors.DefaultConfig()
-	config.AllowOrigins = []string{"http://localhost:3000", "http://localhost:5173"} // Add your frontend URL here
+	config.AllowAllOrigins = true
 	config.AllowMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}
-	config.AllowHeaders = []string{"Origin", "Content-Type", "Accept"}
-	r.Use(cors.New(config))
+	config.AllowHeaders = []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Requested-With"}
+	router.Use(cors.New(config))
 
-	r.POST("/accounts", createAccount)
-	r.GET("/accounts", getAccounts)
-
-		// Swagger documentation route
-	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	router.PUT("/document", handlePutDocument)
+	router.GET("/document/:id", handleGetDocument)
+	router.DELETE("/document/:id", handleDeleteDocument)
+	router.GET("/documents", handleListDocuments)
 
 	log.Println("Server starting on :8080")
-	if err := r.Run(":8080"); err != nil {
+	if err := router.Run(":8080"); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
 }
 
-func getEnv(key, fallback string) string {
-	if value, ok := os.LookupEnv(key); ok {
-		return value
-	}
-	return fallback
-}
-
-
-// ErrorResponse represents the structure of an error response
-type ErrorResponse struct {
-	Error string `json:"error"`
-}
-
-// AccountsResponse represents the structure of the response for multiple accounts
-type AccountsResponse struct {
-	Accounts []Account `json:"accounts"`
-}
-
-// @Summary Create a new account
-// @Description Create a new account with the provided information
-// @Accept  json
-// @Produce  json
-// @Param account body Account true "Account information"
-// @Success 201 {object} Account
-// @Failure 400 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
-// @Router /accounts [post]
-func createAccount(c *gin.Context) {
-	var account Account
-	if err := c.ShouldBindJSON(&account); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{Error: err.Error()})
+func handlePutDocument(c *gin.Context) {
+	var doc Document
+	if err := c.ShouldBindJSON(&doc); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	// Store account in immudb
-	key := []byte("account:" + account.AccountNumber)
-	value, err := json.Marshal(account)
+	jsonData, err := json.Marshal(doc)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to marshal account"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to marshal document"})
 		return
 	}
 
-	_, err = client.Set(context.Background(), key, value)
+	resp, err := makeRequest("PUT", "/ledger/default/collection/default/document", jsonData)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to store account"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read response body"})
 		return
 	}
 
-	c.JSON(http.StatusCreated, account)
+	c.Data(resp.StatusCode, "application/json", body)
 }
 
-// @Summary Get all accounts
-// @Description Retrieve all accounts stored in the system
-// @Produce  json
-// @Success 200 {object} AccountsResponse
-// @Failure 500 {object} ErrorResponse
-// @Router /accounts [get]
-func getAccounts(c *gin.Context) {
-	// Retrieve all accounts from immudb
-	prefix := []byte("account:")
-	scanRequest := &schema.ScanRequest{
-		Prefix:  prefix,
-		SinceTx: 0,
-		Limit:   1000, // Adjust this value based on your needs
-		Desc:    false,
-	}
-
-	entries, err := client.Scan(context.Background(), scanRequest)
+func handleGetDocument(c *gin.Context) {
+	id := c.Param("id")
+	resp, err := makeRequest("GET", fmt.Sprintf("/ledger/default/collection/default/document/%s", id), nil)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to retrieve accounts"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read response body"})
 		return
 	}
 
-	var accounts []Account
-	for _, entry := range entries.Entries {
-		var account Account
-		err := json.Unmarshal(entry.Value, &account)
-		if err != nil {
-			log.Printf("Failed to unmarshal account: %v", err)
-			continue
-		}
-		accounts = append(accounts, account)
-	}
-
-	c.JSON(http.StatusOK, AccountsResponse{Accounts: accounts})
+	c.Data(resp.StatusCode, "application/json", body)
 }
 
-type Account struct {
-	AccountNumber string  `json:"account_number"`
-	AccountName   string  `json:"account_name"`
-	IBAN          string  `json:"iban"`
-	Address       string  `json:"address"`
-	Amount        string `json:"amount"`
-	Type          string  `json:"type"`
+func handleDeleteDocument(c *gin.Context) {
+	id := c.Param("id")
+	resp, err := makeRequest("DELETE", fmt.Sprintf("/ledger/default/collection/default/document/%s", id), nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read response body"})
+		return
+	}
+
+	c.Data(resp.StatusCode, "application/json", body)
+}
+
+type SearchRequest struct {
+	Page    int `json:"page"`
+	PerPage int `json:"perPage"`
+}
+
+func handleListDocuments(c *gin.Context) {
+	// Get page and perPage from query parameters
+	page, err := strconv.Atoi(c.DefaultQuery("page", "1"))
+	if err != nil || page < 1 {
+		page = 1
+	}
+
+	perPage, err := strconv.Atoi(c.DefaultQuery("perPage", "100"))
+	if err != nil || perPage < 1 || perPage > 100 {
+		perPage = 100
+	}
+
+	// Construct the search request
+	searchReq := SearchRequest{
+		Page:    page,
+		PerPage: perPage,
+	}
+
+	// Marshal the search request to JSON
+	jsonData, err := json.Marshal(searchReq)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to construct search request"})
+		return
+	}
+
+	resp, err := makeRequest("POST", "/ledger/default/collection/default/documents/search", jsonData)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read response body"})
+		return
+	}
+
+	// Parse the response
+	var result map[string]interface{}
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse response body"})
+		return
+	}
+
+	c.JSON(resp.StatusCode, result)
+}
+
+func makeRequest(method, path string, body []byte) (*http.Response, error) {
+	client := &http.Client{}
+	req, err := http.NewRequest(method, baseURL+path, bytes.NewBuffer(body))
+	if err != nil {
+		return nil, err
+	}
+
+	apiKey := "default.4c10jOO-Pj0mc5_Bjl4kHA.C77o6i3NY78x3xBQ15RO3UaM2-IQuPHGAYjDU7VMSoH6TXG6"
+	req.Header.Set("X-API-Key", apiKey)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	return client.Do(req)
 }

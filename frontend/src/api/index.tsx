@@ -9,8 +9,9 @@ export interface Account {
   type: string;
 }
 
-export const getAccounts = (): Promise<{ data: { accounts: Account[] } }> =>
-  axios.get(`${import.meta.env.VITE_API_URL}/accounts`);
+export const getAccounts = (): Promise<{
+  data: { revisions: { document: Account }[] };
+}> => axios.get(`${import.meta.env.VITE_API_URL}/documents?page=1&perPage=100`);
 
 export const postAccount = (newAccount: Account) =>
-  axios.post(`${import.meta.env.VITE_API_URL}/accounts`, newAccount);
+  axios.put(`${import.meta.env.VITE_API_URL}/document`, newAccount);
