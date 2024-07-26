@@ -1,10 +1,9 @@
-version: '3.8'
 
 services:
   immudb:
     image: codenotary/immudb:latest
     ports:
-      - "3322:3322"
+      - '3322:3322'
     volumes:
       - immudb_data:/var/lib/immudb
 
@@ -13,7 +12,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     ports:
-      - "8080:8080"
+      - '8080:8080'
     depends_on:
       - immudb
     environment:
@@ -22,13 +21,18 @@ services:
       - IMMUDB_USERNAME=immudb
       - IMMUDB_PASSWORD=immudb
       - IMMUDB_DATABASE=defaultdb
+      - GIN_MODE=release
+      - PORT=8080
+      - IMMUDB_API_KEY=${IMMUDB_API_KEY}
+    env_file:
+      - .env
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
     ports:
-      - "3000:80"
+      - '3000:80'
     depends_on:
       - backend
     environment:

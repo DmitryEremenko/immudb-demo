@@ -6,10 +6,13 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
+
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 
@@ -38,6 +41,11 @@ type SearchRequest struct {
 // @host localhost:8080
 // @BasePath /
 func main() {
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+
 	router := gin.Default()
 
 	config := cors.DefaultConfig()
@@ -162,8 +170,8 @@ func makeRequest(method, path string, body []byte) (*http.Response, error) {
 	if err != nil {
 		return nil, err
 	}
+	apiKey := os.Getenv("IMMUDB_API_KEY")
 
-	apiKey := "default.4c10jOO-Pj0mc5_Bjl4kHA.C77o6i3NY78x3xBQ15RO3UaM2-IQuPHGAYjDU7VMSoH6TXG6"
 	req.Header.Set("X-API-Key", apiKey)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")

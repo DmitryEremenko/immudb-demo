@@ -27,9 +27,14 @@ WORKDIR /root/
 # Copy the binary from the build stage
 COPY --from=builder /app/main .
 
+COPY .env .
+
 # Copy the docs folder for Swagger
 COPY --from=builder /app/docs ./docs
 
 EXPOSE 8080
 
 CMD ["./main"]
+
+ENV GIN_MODE=release
+ENV PORT=8080
