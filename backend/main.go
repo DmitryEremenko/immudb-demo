@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -34,8 +33,6 @@ func main() {
 	router.Use(cors.New(config))
 
 	router.PUT("/document", handlePutDocument)
-	router.GET("/document/:id", handleGetDocument)
-	router.DELETE("/document/:id", handleDeleteDocument)
 	router.GET("/documents", handleListDocuments)
 
 	log.Println("Server starting on :8080")
@@ -58,42 +55,6 @@ func handlePutDocument(c *gin.Context) {
 	}
 
 	resp, err := makeRequest("PUT", "/ledger/default/collection/default/document", jsonData)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read response body"})
-		return
-	}
-
-	c.Data(resp.StatusCode, "application/json", body)
-}
-
-func handleGetDocument(c *gin.Context) {
-	id := c.Param("id")
-	resp, err := makeRequest("GET", fmt.Sprintf("/ledger/default/collection/default/document/%s", id), nil)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read response body"})
-		return
-	}
-
-	c.Data(resp.StatusCode, "application/json", body)
-}
-
-func handleDeleteDocument(c *gin.Context) {
-	id := c.Param("id")
-	resp, err := makeRequest("DELETE", fmt.Sprintf("/ledger/default/collection/default/document/%s", id), nil)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
