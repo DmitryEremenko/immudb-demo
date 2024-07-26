@@ -1,0 +1,79 @@
+basePath: /
+definitions:
+  main.Account:
+    properties:
+      account_name:
+        type: string
+      account_number:
+        type: string
+      address:
+        type: string
+      amount:
+        type: string
+      iban:
+        type: string
+      type:
+        type: string
+    type: object
+  main.AccountsResponse:
+    properties:
+      accounts:
+        items:
+          $ref: '#/definitions/main.Account'
+        type: array
+    type: object
+  main.ErrorResponse:
+    properties:
+      error:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: This is a simple accounting information API.
+  title: Accounting Information API
+  version: "1.0"
+paths:
+  /accounts:
+    get:
+      description: Retrieve all accounts stored in the system
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.AccountsResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+      summary: Get all accounts
+    post:
+      consumes:
+      - application/json
+      description: Create a new account with the provided information
+      parameters:
+      - description: Account information
+        in: body
+        name: account
+        required: true
+        schema:
+          $ref: '#/definitions/main.Account'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/main.Account'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+      summary: Create a new account
+swagger: "2.0"
