@@ -10,6 +10,10 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
+
+	_ "backend/docs"
 )
 
 const baseURL = "https://vault.immudb.io/ics/api/v1"
@@ -19,10 +23,20 @@ type Document struct {
 	AccountName   string `json:"account_name"`
 	IBAN          string `json:"iban"`
 	Address       string `json:"address"`
-	Amount       string `json:"amount"`
+	Amount        string `json:"amount"`
 	Type          string `json:"type"`
 }
 
+type SearchRequest struct {
+	Page    int `json:"page"`
+	PerPage int `json:"perPage"`
+}
+
+// @title ImmuDB Vault API
+// @version 1.0
+// @description This is an API server for interacting with ImmuDB Vault.
+// @host localhost:8080
+// @BasePath /
 func main() {
 	router := gin.Default()
 
@@ -35,12 +49,24 @@ func main() {
 	router.PUT("/document", handlePutDocument)
 	router.GET("/documents", handleListDocuments)
 
+	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
 	log.Println("Server starting on :8080")
 	if err := router.Run(":8080"); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
 }
 
+// @Summary Create or update a document
+// @Description Create a new document or update an existing one
+// @Tags documents
+// @Accept json
+// @Produce json
+// @Param document body Document true "Document object"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /document [put]
 func handlePutDocument(c *gin.Context) {
 	var doc Document
 	if err := c.ShouldBindJSON(&doc); err != nil {
@@ -70,11 +96,17 @@ func handlePutDocument(c *gin.Context) {
 	c.Data(resp.StatusCode, "application/json", body)
 }
 
-type SearchRequest struct {
-	Page    int `json:"page"`
-	PerPage int `json:"perPage"`
-}
-
+// @Summary List documents
+// @Description Get a paginated list of documents
+// @Tags documents
+// @Accept json
+// @Produce json
+// @Param page query int false "Page number" default(1)
+// @Param perPage query int false "Items per page" default(100)
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /documents [get]
 func handleListDocuments(c *gin.Context) {
 	// Get page and perPage from query parameters
 	page, err := strconv.Atoi(c.DefaultQuery("page", "1"))

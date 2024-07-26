@@ -60,6 +60,7 @@ If you want to set up the application for development, follow these more detaile
 5. Access the application:
    - Frontend: Open your browser and go to `http://localhost:3000`
    - Backend API: Available at `http://localhost:8080`
+   - Swagger: Available at `http://localhost:8080/swagger/index.html#/`
 
 ## Project Structure
 
