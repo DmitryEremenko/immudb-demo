@@ -1,5 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
-import axios from 'axios';
+import { useState, useCallback } from 'react';
 import {
   Container,
   Typography,
@@ -15,55 +14,39 @@ import {
   TableRow,
   Paper,
 } from '@mui/material';
+import { Account, getAccounts, postAccount } from './api';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 function App() {
-  const [accounts, setAccounts] = useState([]);
-  const [newAccount, setNewAccount] = useState({
+  const [newAccount, setNewAccount] = useState<Account>({
     account_number: '',
     account_name: '',
     iban: '',
     address: '',
-    amount: 0,
+    amount: '0',
     type: 'sending',
   });
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    fetchAccounts();
-  }, []);
+  const { data } = useQuery({ queryKey: ['accounts'], queryFn: getAccounts });
 
-  const fetchAccounts = async () => {
-    try {
-      const response = await axios.get(`${import.meta.env.VITE_API_URL}/accounts`);
-      setAccounts(response.data.accounts);
-      console.log(response);
-    } catch (error) {
-      console.error('Error fetching accounts:', error);
-    }
+  const { mutate } = useMutation({
+    mutationFn: postAccount,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['accounts'] });
+    },
+  });
+
+  const handleInputChange = useCallback(
+    (e: { target: { name: string; value: string } }) => {
+      setNewAccount({ ...newAccount, [e.target.name]: e.target.value });
+    },
+    [newAccount],
+  );
+
+  const handleSubmit = () => {
+    mutate(newAccount);
   };
-
-  const handleInputChange = useCallback((e: { target: { name: string; value: unknown; }; }) => {
-    setNewAccount({ ...newAccount, [e.target.name]: e.target.value });
-  }, [newAccount]);
-
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    try {
-      await axios.post(`${import.meta.env.VITE_API_URL}/accounts`, newAccount);
-      setNewAccount({
-        account_number: '',
-        account_name: '',
-        iban: '',
-        address: '',
-        amount: 0,
-        type: 'sending',
-      });
-      fetchAccounts();
-    } catch (error) {
-      console.error('Error creating account:', error);
-    }
-  };
-
-  console.log(accounts);
 
   return (
     <Container maxWidth='md'>
@@ -148,7 +131,7 @@ function App() {
             </TableRow>
           </TableHead>
           <TableBody>
-            {accounts && accounts?.map(
+            {data?.data?.accounts?.map(
               (account: {
                 account_number: string;
                 account_name: string;
